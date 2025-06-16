@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\TestCpu.exe</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles>
+    <ContentFile>
+      <FullPath>D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\ComputeShader.cso</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\PixelShader.cso</FullPath>
+    </ContentFile>
+    <ContentFile>
+      <FullPath>D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\VertexShader.cso</FullPath>
+    </ContentFile>
+  </ContentFiles>
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

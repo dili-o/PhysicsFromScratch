@@ -1,0 +1,1 @@
+D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\TestCpu.exe

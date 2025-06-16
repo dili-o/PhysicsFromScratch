@@ -1,0 +1,21 @@
+﻿D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\ComputeShader.hlsl(370,13-42): warning X3203: signed/unsigned mismatch, unsigned assumed
+D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\ComputeShader.hlsl(159,5): warning X4000: use of potentially uninitialized variable (outHit)
+D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\ComputeShader.hlsl(284,5): warning X4000: use of potentially uninitialized variable (Scatter)
+  
+  compilation header save succeeded; see D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\CompiledComputeShader.h
+  compilation object save succeeded; see D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\ComputeShader.cso
+  compilation header save succeeded; see D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\CompiledPixelShader.h
+  compilation object save succeeded; see D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\PixelShader.cso
+  compilation header save succeeded; see D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\CompiledVertexShader.h
+  compilation object save succeeded; see D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\VertexShader.cso
+  TracyClient.cpp
+  TaskScheduler.cpp
+  TaskScheduler_c.cpp
+  Maths.cpp
+  Test.cpp
+  TestWin.cpp
+  Generating code
+  Previous IPDB not found, fall back to full compilation.
+  All 816 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  TestCpu.vcxproj -> D:\vulkan-renderer-v1\Engine\Vendor\tracy\examples\ToyPathTracer\Windows\x64\Release\TestCpu.exe
