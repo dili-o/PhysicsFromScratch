@@ -136,7 +136,9 @@ int main() {
         frameResized = true;
       }
     }
+
     camera.Update(deltaTime);
+    sceneGraph.Update(deltaTime);
 
     // Renderloop
     vkWaitForFences(ctx.vkDevice, 1, &inFlightFences[currentFrame], VK_TRUE,

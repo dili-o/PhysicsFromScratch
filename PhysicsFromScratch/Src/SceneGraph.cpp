@@ -6,8 +6,8 @@
 SceneGraph::SceneGraph(hlx::VkContext &ctx, u32 maxEntityCount,
                        VkCommandPool vkTransferCommandPool,
                        VkCommandPool vkGraphicsCommandPool) {
-  transforms.reserve(maxEntityCount);
   names.reserve(maxEntityCount);
+  bodies.reserve(maxEntityCount);
 
   // Create pipeline
   HASSERT(hlx::CompileShader(SHADER_PATH, "Sphere.vert", "Sphere_vert.spv",
@@ -294,10 +294,26 @@ void SceneGraph::Shutdown(hlx::VkContext &ctx) {
   ctx.DestroyBuffer(m_IndexBuffer);
 }
 
+void SceneGraph::Update(const f32 dt_Sec) {
+  for (int i = 0; i < bodies.size(); i++) {
+    // Acceleration due to gravity
+    bodies[i].linearVelocity += Vec3(0.f, -graivty, 0.f) * dt_Sec;
+  }
+
+  for (int i = 0; i < bodies.size(); i++) {
+    // Position update
+    bodies[i].transform.position += bodies[i].linearVelocity * dt_Sec;
+  }
+}
+
 void SceneGraph::AddSphere(Transform transform) {
   std::string name = "Sphere_" + std::to_string(names.size());
   names.push_back(name);
-  transforms.push_back(transform);
+
+  Body body{};
+  body.transform = transform;
+  body.centerOfMass = Vec3(0.f);
+  bodies.push_back(body);
 }
 
 void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
@@ -311,8 +327,8 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
                                         &imageDescriptor);
   PushConstant push{};
   push.viewProj = camera.GetProjection() * camera.GetView();
-  for (size_t i = 0; i < transforms.size(); ++i) {
-    push.model = transforms[i].GetMat4();
+  for (size_t i = 0; i < bodies.size(); ++i) {
+    push.model = bodies[i].transform.GetMat4();
 
     vkCmdPushConstants(cb, m_SpherePipeline.vkPipelineLayout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
@@ -355,7 +371,7 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
     if (m_SelectedObject == UINT32_MAX) {
       ImGui::Text("No node selected");
     } else {
-      Transform &transform = transforms[m_SelectedObject];
+      Transform &transform = bodies[m_SelectedObject].transform;
       ImGui::InputFloat3("Position", &transform.position.x, "%.3f");
 
       Vec3 eulerRadians = glm::eulerAngles(transform.rotation);
