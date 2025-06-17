@@ -70,7 +70,7 @@ int main() {
                                  vkGraphicsCommandPool);
   SceneGraph sceneGraph(ctx, 100, vkTransferCommandPool, vkGraphicsCommandPool);
   Transform transform{};
-  transform.position = Vec3(0.f, 1.f, 0.f);
+  transform.position = Vec3(0.f, 5.f, 0.f);
   sceneGraph.AddSphere(transform, 1.f);
   transform.position = Vec3(0.f, -1000.f, 0.f);
   transform.scale = Vec3(1000.f);

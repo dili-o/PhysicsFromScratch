@@ -1,4 +1,5 @@
 #include "SceneGraph.hpp"
+#include "Physics/Intersections.hpp"
 // Vendor
 #include <imgui.h>
 #include <stb_image.h>
@@ -307,7 +308,7 @@ void SceneGraph::TogglePhysics() {
 void SceneGraph::Update(const f32 dt_Sec) {
   if (!m_SimulatePhysics)
     return;
-  for (int i = 0; i < bodies.size(); i++) {
+  for (size_t i = 0; i < bodies.size(); i++) {
     Body &body = bodies[i];
     // Calculate impulse due to graivty
     // Impulse (J) = Mass (m) * Acceleration (g) * dTime (dt)
@@ -317,7 +318,22 @@ void SceneGraph::Update(const f32 dt_Sec) {
     body.ApplyImpulseLinear(impulseGravity);
   }
 
-  for (int i = 0; i < bodies.size(); i++) {
+  // Check for collisions
+  for (size_t i = 0; i < bodies.size(); ++i) {
+    for (size_t j = i + 1; j < bodies.size(); ++j) {
+      Body &bodyA = bodies[i];
+      Body &bodyB = bodies[j];
+
+      if (bodyA.invMass == 0.f && bodyB.invMass == 0.f)
+        continue;
+      if (Intersect(&bodyA, &bodyB)) {
+        bodyA.linearVelocity = Vec3(0.f);
+        bodyB.linearVelocity = Vec3(0.f);
+      }
+    }
+  }
+
+  for (size_t i = 0; i < bodies.size(); i++) {
     // Position update
     bodies[i].transform.position += bodies[i].linearVelocity * dt_Sec;
   }

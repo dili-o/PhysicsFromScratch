@@ -41,7 +41,7 @@ private:
   f32 m_NearPlane{0.1f};
   f32 m_FarPlane{100.f};
   f32 m_Fov{45.f};
-  f32 m_OrbitingDistance{5.f};
+  f32 m_OrbitingDistance{15.f};
   f32 m_AspectRatio{1280.f / 720.f};
 };
 
