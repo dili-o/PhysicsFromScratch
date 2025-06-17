@@ -294,10 +294,27 @@ void SceneGraph::Shutdown(hlx::VkContext &ctx) {
   ctx.DestroyBuffer(m_IndexBuffer);
 }
 
+void SceneGraph::TogglePhysics() {
+  m_SimulatePhysics = !m_SimulatePhysics;
+  // TODO: Maybe do this only when physics simulation is reset
+  if (!m_SimulatePhysics) {
+    for (size_t i = 0; i < bodies.size(); ++i) {
+      bodies[i].linearVelocity = Vec3(0.f);
+    }
+  }
+}
+
 void SceneGraph::Update(const f32 dt_Sec) {
+  if (!m_SimulatePhysics)
+    return;
   for (int i = 0; i < bodies.size(); i++) {
-    // Acceleration due to gravity
-    bodies[i].linearVelocity += Vec3(0.f, -graivty, 0.f) * dt_Sec;
+    Body &body = bodies[i];
+    // Calculate impulse due to graivty
+    // Impulse (J) = Mass (m) * Acceleration (g) * dTime (dt)
+    f32 mass = 1.f / body.invMass;
+    Vec3 impulseGravity = Vec3(0.f, -graivty, 0.f) * mass * dt_Sec;
+
+    body.ApplyImpulseLinear(impulseGravity);
   }
 
   for (int i = 0; i < bodies.size(); i++) {
@@ -306,13 +323,14 @@ void SceneGraph::Update(const f32 dt_Sec) {
   }
 }
 
-void SceneGraph::AddSphere(Transform transform) {
+void SceneGraph::AddSphere(Transform transform, f32 mass) {
   std::string name = "Sphere_" + std::to_string(names.size());
   names.push_back(name);
 
   Body body{};
   body.transform = transform;
   body.centerOfMass = Vec3(0.f);
+  body.invMass = (mass == 0.f) ? 0.f : 1.f / mass;
   bodies.push_back(body);
 }
 
@@ -349,7 +367,7 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       if (ImGui::BeginMenu("Scene")) {
         if (ImGui::MenuItem("Add Sphere")) {
           Transform transform{};
-          AddSphere(transform);
+          AddSphere(transform, 1.f);
         }
         ImGui::EndMenu();
       }
@@ -371,7 +389,8 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
     if (m_SelectedObject == UINT32_MAX) {
       ImGui::Text("No node selected");
     } else {
-      Transform &transform = bodies[m_SelectedObject].transform;
+      Body &body = bodies[m_SelectedObject];
+      Transform &transform = body.transform;
       ImGui::InputFloat3("Position", &transform.position.x, "%.3f");
 
       Vec3 eulerRadians = glm::eulerAngles(transform.rotation);
@@ -387,6 +406,12 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       ImGui::InputFloat("Scale", &currentScale, 0.f, 0.f, "%.3f");
       if (ImGui::IsItemDeactivatedAfterEdit()) {
         transform.scale = Vec3(currentScale);
+      }
+
+      f32 mass = 1.f / body.invMass;
+      ImGui::InputFloat("Mass", &mass, 0.f, 0.f, "%.3f");
+      if (ImGui::IsItemDeactivatedAfterEdit()) {
+        body.invMass = 1.f / mass;
       }
     }
   }

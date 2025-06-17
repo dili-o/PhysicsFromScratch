@@ -24,8 +24,9 @@ public:
              VkCommandPool vkGraphicsCommandPool);
 
   void Shutdown(hlx::VkContext &ctx);
+  void TogglePhysics();
   void Update(const f32 dt_Sec);
-  void AddSphere(Transform transform);
+  void AddSphere(Transform transform, f32 mass);
   void Render(VkCommandBuffer cb, hlx::Camera &camera);
 
 public:
@@ -43,6 +44,7 @@ private:
   hlx::VulkanBuffer m_VertexBuffer;
   hlx::VulkanBuffer m_IndexBuffer;
   u32 m_IndexCount;
+  bool m_SimulatePhysics = false;
 
   u32 m_SelectedObject{UINT32_MAX};
 };

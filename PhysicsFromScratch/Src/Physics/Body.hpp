@@ -2,7 +2,7 @@
 #include <Defines.hpp>
 #include <Math/Quat.hpp>
 
-const f32 graivty = 10.f; // ms
+const f32 graivty = 10.f;
 
 struct Transform {
   Vec3 position{0.f};
@@ -33,6 +33,7 @@ struct Body {
   Transform transform;
   Vec3 centerOfMass;
   Vec3 linearVelocity;
+  f32 invMass;
 
   inline Vec3 GetCenterOfMassWorldSpace() const {
     Vec4 pos = transform.GetMat4() * Vec4(centerOfMass, 0.f);
@@ -51,5 +52,13 @@ struct Body {
     Vec3 worldSpace =
         GetCenterOfMassWorldSpace() + (transform.rotation * worldPt);
     return worldSpace;
+  }
+
+  inline void ApplyImpulseLinear(const Vec3 &impulse) {
+    if (invMass == 0.f)
+      return; // Infinite mass
+    // Impulse (J) = mass (m) * dVelocity (dv)
+    // dVelocity (dv) = Impulse (J) / mass (m)
+    linearVelocity += impulse * invMass;
   }
 };

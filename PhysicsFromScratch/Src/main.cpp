@@ -71,10 +71,10 @@ int main() {
   SceneGraph sceneGraph(ctx, 100, vkTransferCommandPool, vkGraphicsCommandPool);
   Transform transform{};
   transform.position = Vec3(0.f, 1.f, 0.f);
-  sceneGraph.AddSphere(transform);
+  sceneGraph.AddSphere(transform, 1.f);
   transform.position = Vec3(0.f, -1000.f, 0.f);
   transform.scale = Vec3(1000.f);
-  sceneGraph.AddSphere(transform);
+  sceneGraph.AddSphere(transform, 0.f);
 
   hlx::VulkanPipeline backgroundPipeline = createBackgroundPipeline(ctx);
 
@@ -122,6 +122,10 @@ int main() {
         quit = true;
       }
       camera.HandleEvents(&e, platform.GetWindowHandle());
+      if (e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_P)
+          sceneGraph.TogglePhysics();
+      }
 
       if (e.type == SDL_EVENT_WINDOW_RESIZED) {
         frameResized = true;
