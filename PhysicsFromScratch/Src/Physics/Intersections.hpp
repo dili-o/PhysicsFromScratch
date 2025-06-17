@@ -1,5 +1,5 @@
 #pragma once
 
-struct Body;
+#include "Contact.hpp"
 
-bool Intersect(const Body *bodyA, const Body *bodyB);
+bool Intersect(Body *bodyA, Body *bodyB, Contact &contact);

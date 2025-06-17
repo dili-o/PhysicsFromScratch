@@ -9,8 +9,11 @@
 // Vendor
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
+#include <format>
 
 static bool pOpen = true;
+
+#define TARGET_FPS 60
 
 hlx::VulkanPipeline createBackgroundPipeline(hlx::VkContext &ctx);
 
@@ -22,6 +25,7 @@ int main() {
   hlx::Camera camera(Vec3(0.f), 0.1f, 3000.f);
 
   const u32 kMaxFramesInFlight = 3;
+  static bool limitFrames = true;
 
   std::array<VkFence, kMaxFramesInFlight> inFlightFences;
   std::array<VkSemaphore, kMaxFramesInFlight> renderFinishedSemaphores;
@@ -102,7 +106,7 @@ int main() {
   SDL_zero(e);
   f32 deltaTime;
   u64 lastTime = SDL_GetPerformanceCounter();
-  f64 targetFrameTimeMS = 1000.0 / 60.0;
+  f64 targetFrameTimeMS = 1000.0 / TARGET_FPS;
 
   while (quit == false) {
     u64 currentTime = SDL_GetPerformanceCounter();
@@ -125,6 +129,8 @@ int main() {
       if (e.type == SDL_EVENT_KEY_DOWN) {
         if (e.key.key == SDLK_P)
           sceneGraph.TogglePhysics();
+        if (e.key.key == SDLK_C)
+          limitFrames = !limitFrames;
       }
 
       if (e.type == SDL_EVENT_WINDOW_RESIZED) {
@@ -385,6 +391,18 @@ int main() {
     } else if (result != VK_SUCCESS) {
       throw std::runtime_error("failed to present swap chain image!");
     }
+
+    f64 frameEndTimeMS = platform.GetAbsoluteTimeMS();
+    f64 frameElapsedTimeMS = frameEndTimeMS - frameStartTimeMS;
+    f64 remainingTimeMS = targetFrameTimeMS - frameElapsedTimeMS;
+    if (remainingTimeMS > 0 && limitFrames) {
+      // If there is time left, give it back to the OS.
+      SDL_Delay(static_cast<u32>(remainingTimeMS - 1));
+    }
+
+    std::string title =
+        std::format("PhysicsFromScratch,    FrameTime: {:.3f}ms", deltaTime);
+    SDL_SetWindowTitle(platform.GetWindowHandle(), title.c_str());
     currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
   }
 

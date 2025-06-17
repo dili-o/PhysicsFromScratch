@@ -1,4 +1,5 @@
 #include "SceneGraph.hpp"
+#include "Physics/Contact.hpp"
 #include "Physics/Intersections.hpp"
 // Vendor
 #include <imgui.h>
@@ -326,9 +327,10 @@ void SceneGraph::Update(const f32 dt_Sec) {
 
       if (bodyA.invMass == 0.f && bodyB.invMass == 0.f)
         continue;
-      if (Intersect(&bodyA, &bodyB)) {
-        bodyA.linearVelocity = Vec3(0.f);
-        bodyB.linearVelocity = Vec3(0.f);
+
+      Contact contact;
+      if (Intersect(&bodyA, &bodyB, contact)) {
+        ResolveContact(contact);
       }
     }
   }
@@ -407,6 +409,8 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
     } else {
       Body &body = bodies[m_SelectedObject];
       Transform &transform = body.transform;
+      if (m_SimulatePhysics)
+        ImGui::BeginDisabled();
       ImGui::InputFloat3("Position", &transform.position.x, "%.3f");
 
       Vec3 eulerRadians = glm::eulerAngles(transform.rotation);
@@ -429,6 +433,8 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       if (ImGui::IsItemDeactivatedAfterEdit()) {
         body.invMass = 1.f / mass;
       }
+      if (m_SimulatePhysics)
+        ImGui::EndDisabled();
     }
   }
   ImGui::End();
