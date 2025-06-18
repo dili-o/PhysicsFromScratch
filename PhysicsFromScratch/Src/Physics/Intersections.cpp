@@ -2,10 +2,11 @@
 #include "Intersections.hpp"
 
 bool Intersect(Body *bodyA, Body *bodyB, Contact &contact) {
-  const Vec3 ab = bodyB->transform.position - bodyA->transform.position;
-
   contact.bodyA = bodyA;
   contact.bodyB = bodyB;
+
+  const Vec3 ab = bodyB->transform.position - bodyA->transform.position;
+
   contact.normalAB = glm::normalize(ab);
 
   contact.ptOnA_WorldSpace =

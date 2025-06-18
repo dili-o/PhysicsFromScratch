@@ -2,6 +2,7 @@
 
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec2 inTexCoord;
+layout(location = 2) in vec3 inModelNorms;
 
 layout(location = 0) out vec4 outColor;
 
@@ -27,6 +28,17 @@ struct Light {
 
 Light sun;
 
+int MaxComponentIndex(vec3 v) {
+    return (v.x >= v.y && v.x >= v.z) ? 0 :
+           (v.y >= v.z) ? 1 : 2;
+}
+
+int MaxAbsComponentIndex(vec3 v) {
+    vec3 absV = abs(v);
+    return (absV.x >= absV.y && absV.x >= absV.z) ? 0 :
+           (absV.y >= absV.z) ? 1 : 2;
+}
+
 void main() {
 #ifdef RANDOM
   uint mhash = hash(uint(gl_PrimitiveID));
@@ -34,8 +46,11 @@ void main() {
   outColor = vec4(color , 1.f);
 #else
   vec3 sphereColor = texture(sphereTexture, inTexCoord).rgb; 
+  vec3 tint = vec3(0.f);
+  tint[MaxAbsComponentIndex(inModelNorms)] = 1.f;
+  sphereColor = mix(sphereColor, tint, 0.5f);
   // ambient
-  sun.direction = normalize(vec3(1, -1, -1));
+  sun.direction = normalize(vec3(0, -1, 1));
   sun.ambient = vec3(0.2f);
   sun.diffuse = vec3(0.8f);
   vec3 ambient = sun.ambient * sphereColor;

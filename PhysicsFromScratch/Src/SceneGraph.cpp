@@ -314,7 +314,7 @@ void SceneGraph::Update(const f32 dt_Sec) {
     // Calculate impulse due to graivty
     // Impulse (J) = Mass (m) * Acceleration (g) * dTime (dt)
     f32 mass = 1.f / body.invMass;
-    Vec3 impulseGravity = Vec3(0.f, -graivty, 0.f) * mass * dt_Sec;
+    Vec3 impulseGravity = Vec3(0.f, -gravity, 0.f) * mass * dt_Sec;
 
     body.ApplyImpulseLinear(impulseGravity);
   }
@@ -349,6 +349,7 @@ void SceneGraph::AddSphere(Transform transform, f32 mass) {
   body.transform = transform;
   body.centerOfMass = Vec3(0.f);
   body.invMass = (mass == 0.f) ? 0.f : 1.f / mass;
+  body.elasticity = 1.f;
   bodies.push_back(body);
 }
 
@@ -385,6 +386,7 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       if (ImGui::BeginMenu("Scene")) {
         if (ImGui::MenuItem("Add Sphere")) {
           Transform transform{};
+          transform.position.y = 10.f;
           AddSphere(transform, 1.f);
         }
         ImGui::EndMenu();
@@ -428,11 +430,16 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
         transform.scale = Vec3(currentScale);
       }
 
+      // Mass
       f32 mass = 1.f / body.invMass;
       ImGui::InputFloat("Mass", &mass, 0.f, 0.f, "%.3f");
       if (ImGui::IsItemDeactivatedAfterEdit()) {
         body.invMass = 1.f / mass;
       }
+
+      // Elasticity
+      ImGui::SliderFloat("Elasticity", &body.elasticity, 0.f, 1.f, "%.3f");
+
       if (m_SimulatePhysics)
         ImGui::EndDisabled();
     }

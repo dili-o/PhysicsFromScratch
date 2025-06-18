@@ -2,7 +2,7 @@
 #include <Defines.hpp>
 #include <Math/Quat.hpp>
 
-const f32 graivty = 10.f;
+const f32 gravity = 10.f;
 
 struct Transform {
   Vec3 position{0.f};
@@ -34,6 +34,7 @@ struct Body {
   Vec3 centerOfMass;
   Vec3 linearVelocity;
   f32 invMass;
+  f32 elasticity;
 
   inline Vec3 GetCenterOfMassWorldSpace() const {
     Vec4 pos = transform.GetMat4() * Vec4(centerOfMass, 0.f);
