@@ -50,7 +50,7 @@ void main() {
   tint[MaxAbsComponentIndex(inModelNorms)] = 1.f;
   sphereColor = mix(sphereColor, tint, 0.5f);
   // ambient
-  sun.direction = normalize(vec3(0, -1, 1));
+  sun.direction = normalize(vec3(0, -1, -1));
   sun.ambient = vec3(0.2f);
   sun.diffuse = vec3(0.8f);
   vec3 ambient = sun.ambient * sphereColor;

@@ -42,7 +42,7 @@ Mat4 Camera::GetView() {
     direction.y = sin(glm::radians(m_Pitch));
     direction.z = cos(glm::radians(m_Pitch)) * cos(glm::radians(m_Yaw));
 
-    m_Position = -direction * m_OrbitingDistance; // Orbit around origin
+    m_Position = direction * m_OrbitingDistance; // Orbit around origin
     Vec3 up = Vec3(0, 1, 0);
 
     return glm::lookAt(m_Position, Vec3(0), up);
@@ -189,7 +189,7 @@ void Camera::OnMouseScrollEvent(i8 direction) {
     constexpr f32 scrollFactor = 2.f;
     if (m_IsOrbiting) {
       m_OrbitingDistance += (direction * -scrollFactor);
-      m_OrbitingDistance = glm::clamp(m_OrbitingDistance, 2.f, 90.f);
+      m_OrbitingDistance = glm::clamp(m_OrbitingDistance, 2.f, 180.f);
     } else {
       m_Fov += (direction * -scrollFactor);
       m_Fov = glm::clamp(m_Fov, 2.f, 90.f);

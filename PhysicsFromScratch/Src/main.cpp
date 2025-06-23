@@ -73,12 +73,25 @@ int main() {
   hlx::ImguiBackend imguiBackend(&ctx, platform.GetWindowHandle(),
                                  vkGraphicsCommandPool);
   SceneGraph sceneGraph(ctx, 100, vkTransferCommandPool, vkGraphicsCommandPool);
-  Transform transform{};
-  transform.position = Vec3(0.f, 5.f, 0.f);
-  sceneGraph.AddSphere(transform, 1.f);
-  transform.position = Vec3(0.f, -1000.f, 0.f);
-  transform.scale = Vec3(1000.f);
-  sceneGraph.AddSphere(transform, 0.f);
+
+  Body body{};
+  body.transform.position = Vec3(0.f, 5.f, 0.f);
+  body.transform.rotation = Quat(1.f, 0.f, 0.f, 0.f);
+  body.linearVelocity = Vec3(1.f, 0.f, 0.f);
+  body.invMass = 1.f;
+  body.elasticity = 0.f;
+  body.friction = 0.5f;
+
+  sceneGraph.AddSphere(body);
+
+  body.transform.position = Vec3(0.f, -1000.f, 0.f);
+  body.transform.scale = Vec3(1000.f);
+  body.linearVelocity = Vec3(0.f, 0.f, 0.f);
+  body.angularVelocity = Vec3(0.f);
+  body.invMass = 0.f;
+  body.elasticity = 1.f;
+  body.friction = 0.5f;
+  sceneGraph.AddSphere(body);
 
   hlx::VulkanPipeline backgroundPipeline = createBackgroundPipeline(ctx);
 

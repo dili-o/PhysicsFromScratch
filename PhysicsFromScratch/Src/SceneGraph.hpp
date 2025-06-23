@@ -26,7 +26,7 @@ public:
   void Shutdown(hlx::VkContext &ctx);
   void TogglePhysics();
   void Update(const f32 dt_Sec);
-  void AddSphere(Transform transform, f32 mass);
+  void AddSphere(Body body);
   void Render(VkCommandBuffer cb, hlx::Camera &camera);
 
 public:

@@ -315,7 +315,6 @@ void SceneGraph::Update(const f32 dt_Sec) {
     // Impulse (J) = Mass (m) * Acceleration (g) * dTime (dt)
     f32 mass = 1.f / body.invMass;
     Vec3 impulseGravity = Vec3(0.f, -gravity, 0.f) * mass * dt_Sec;
-
     body.ApplyImpulseLinear(impulseGravity);
   }
 
@@ -335,21 +334,16 @@ void SceneGraph::Update(const f32 dt_Sec) {
     }
   }
 
+  // Update position
   for (size_t i = 0; i < bodies.size(); i++) {
-    // Position update
-    bodies[i].transform.position += bodies[i].linearVelocity * dt_Sec;
+    bodies[i].Update(dt_Sec);
   }
 }
 
-void SceneGraph::AddSphere(Transform transform, f32 mass) {
+void SceneGraph::AddSphere(Body body) {
   std::string name = "Sphere_" + std::to_string(names.size());
   names.push_back(name);
 
-  Body body{};
-  body.transform = transform;
-  body.centerOfMass = Vec3(0.f);
-  body.invMass = (mass == 0.f) ? 0.f : 1.f / mass;
-  body.elasticity = 1.f;
   bodies.push_back(body);
 }
 
@@ -373,8 +367,8 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
     vkCmdDrawIndexed(cb, m_IndexCount, 1, 0, 0, 0);
   }
 
-  // Imgui
   ImGuiWindowFlags winFlags = ImGuiWindowFlags_NoResize |
+                              // Imgui
                               ImGuiWindowFlags_NoMove |
                               ImGuiWindowFlags_MenuBar;
 
@@ -385,9 +379,14 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
     if (ImGui::BeginMenuBar()) {
       if (ImGui::BeginMenu("Scene")) {
         if (ImGui::MenuItem("Add Sphere")) {
-          Transform transform{};
-          transform.position.y = 10.f;
-          AddSphere(transform, 1.f);
+          Body body{};
+          body.transform.position = Vec3(0.f, 10.f, 0.f);
+          body.transform.rotation = Quat(1.f, 0.f, 0.f, 0.f);
+          body.linearVelocity = Vec3(0.f, 0.f, 0.f);
+          body.invMass = 1.f;
+          body.elasticity = 0.f;
+          body.friction = 0.5f;
+          AddSphere(body);
         }
         ImGui::EndMenu();
       }
@@ -440,8 +439,20 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       // Elasticity
       ImGui::SliderFloat("Elasticity", &body.elasticity, 0.f, 1.f, "%.3f");
 
+      // Friction
+      ImGui::SliderFloat("Friction", &body.friction, 0.f, 1.f, "%.3f");
+
       if (m_SimulatePhysics)
         ImGui::EndDisabled();
+
+      ImGui::BeginDisabled();
+      // linear Velocity
+      ImGui::InputFloat3("Linear Velocity", &body.linearVelocity.x, "%.3f");
+      // Angular Velocity
+      ImGui::InputFloat3("Angular Velocity", &body.angularVelocity.x, "%.3f");
+      ImGui::Text("Angle of rotation: %.3f",
+                  glm::degrees(glm::length(body.angularVelocity)));
+      ImGui::EndDisabled();
     }
   }
   ImGui::End();
