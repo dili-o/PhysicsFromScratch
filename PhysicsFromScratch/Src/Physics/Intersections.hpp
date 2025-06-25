@@ -2,4 +2,4 @@
 
 #include "Contact.hpp"
 
-bool Intersect(Body *bodyA, Body *bodyB, Contact &contact);
+bool Intersect(Body *bodyA, Body *bodyB, f32 dt_Sec, Contact &contact);

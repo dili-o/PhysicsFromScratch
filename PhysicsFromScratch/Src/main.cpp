@@ -13,7 +13,7 @@
 
 static bool pOpen = true;
 
-#define TARGET_FPS 60
+#define TARGET_FPS 30
 
 hlx::VulkanPipeline createBackgroundPipeline(hlx::VkContext &ctx);
 
@@ -75,13 +75,26 @@ int main() {
   SceneGraph sceneGraph(ctx, 100, vkTransferCommandPool, vkGraphicsCommandPool);
 
   Body body{};
-  body.transform.position = Vec3(0.f, 5.f, 0.f);
-  body.transform.rotation = Quat(1.f, 0.f, 0.f, 0.f);
-  body.linearVelocity = Vec3(1.f, 0.f, 0.f);
-  body.invMass = 1.f;
-  body.elasticity = 0.f;
-  body.friction = 0.5f;
+  // body.transform.position = Vec3(0.f, 5.f, 0.f);
+  // body.transform.rotation = Quat(1.f, 0.f, 0.f, 0.f);
+  // body.linearVelocity = Vec3(1.f, 0.f, 0.f);
+  // body.invMass = 1.f;
+  // body.elasticity = 0.f;
+  // body.friction = 0.5f;
+  // sceneGraph.AddSphere(body);
 
+  body.transform.position = Vec3(-3.f, 3.f, 0.f);
+  body.linearVelocity = Vec3(6000.f, 0.f, 0.f);
+  body.invMass = 1.0f;
+  body.elasticity = 0.0f;
+  body.friction = 0.5f;
+  sceneGraph.AddSphere(body);
+
+  body.transform.position = Vec3(0, 3, 0);
+  body.linearVelocity = Vec3(0, 0, 0);
+  body.invMass = 0.0f;
+  body.elasticity = 0.0f;
+  body.friction = 0.5f;
   sceneGraph.AddSphere(body);
 
   body.transform.position = Vec3(0.f, -1000.f, 0.f);

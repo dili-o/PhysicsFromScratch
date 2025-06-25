@@ -14,7 +14,6 @@ void ResolveContact(Contact &contact) {
   const Mat3 invWorldInertiaA = bodyA->GetInverseInertiaTensorWorldSpace();
   const Mat3 invWorldInertiaB = bodyB->GetInverseInertiaTensorWorldSpace();
 
-  // Calculate collision impulse
   const Vec3 &n = contact.normalAB;
   const Vec3 ra = ptOnA - bodyA->GetCenterOfMassWorldSpace();
   const Vec3 rb = ptOnB - bodyB->GetCenterOfMassWorldSpace();
@@ -64,11 +63,14 @@ void ResolveContact(Contact &contact) {
     bodyA->ApplyImpulse(ptOnA, impulseFriction * -1.0f);
     bodyB->ApplyImpulse(ptOnB, impulseFriction * 1.0f);
   }
-
-  // Resolve Positions
-  const f32 tA = bodyA->invMass / (bodyA->invMass + bodyB->invMass);
-  const f32 tB = bodyB->invMass / (bodyA->invMass + bodyB->invMass);
-  const Vec3 ds = contact.ptOnB_WorldSpace - contact.ptOnA_WorldSpace;
-  bodyA->transform.position += ds * tA;
-  bodyB->transform.position -= ds * tB;
+  // Let ’s alsomove our colliding objects to just outside of each other
+  // (projection method)
+  if (contact.timeOfImpact == 0.f) {
+    //    Resolve Positions
+    const f32 tA = bodyA->invMass / (bodyA->invMass + bodyB->invMass);
+    const f32 tB = bodyB->invMass / (bodyA->invMass + bodyB->invMass);
+    const Vec3 ds = contact.ptOnB_WorldSpace - contact.ptOnA_WorldSpace;
+    bodyA->transform.position += ds * tA;
+    bodyB->transform.position -= ds * tB;
+  }
 }

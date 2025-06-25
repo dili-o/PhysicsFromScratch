@@ -5,6 +5,8 @@
 #include <imgui.h>
 #include <stb_image.h>
 
+#define MAX_BODIES 300
+
 SceneGraph::SceneGraph(hlx::VkContext &ctx, u32 maxEntityCount,
                        VkCommandPool vkTransferCommandPool,
                        VkCommandPool vkGraphicsCommandPool) {
@@ -252,7 +254,7 @@ SceneGraph::SceneGraph(hlx::VkContext &ctx, u32 maxEntityCount,
   std::vector<u32> indices;
   std::vector<Vertex> vertices;
 
-  GenerateSphere(vertices, indices, 1.f);
+  GenerateSphere(vertices, indices, 1.f, 128, 128);
   m_IndexCount = indices.size();
 
   u64 vertexBufferSize = sizeof(Vertex) * vertices.size();
@@ -275,6 +277,10 @@ SceneGraph::SceneGraph(hlx::VkContext &ctx, u32 maxEntityCount,
 
   ctx.CopyToBuffer(m_IndexBuffer.vkHandle, 0, indexBufferSize, indices.data(),
                    vkTransferCommandPool);
+
+  // Allocate temp contacts buffer
+  m_pTempContacts =
+      static_cast<Contact *>(malloc(sizeof(Contact) * MAX_BODIES * MAX_BODIES));
 }
 
 void SceneGraph::Shutdown(hlx::VkContext &ctx) {
@@ -294,6 +300,8 @@ void SceneGraph::Shutdown(hlx::VkContext &ctx) {
                     ctx.vkAllocationCallbacks);
   ctx.DestroyBuffer(m_VertexBuffer);
   ctx.DestroyBuffer(m_IndexBuffer);
+
+  free(m_pTempContacts);
 }
 
 void SceneGraph::TogglePhysics() {
@@ -304,6 +312,18 @@ void SceneGraph::TogglePhysics() {
       bodies[i].linearVelocity = Vec3(0.f);
     }
   }
+}
+
+i32 CompareContacts(const void *p1, const void *p2) {
+  Contact a = *(Contact *)p1;
+  Contact b = *(Contact *)p2;
+  if (a.timeOfImpact < b.timeOfImpact) {
+    return -1;
+  }
+  if (a.timeOfImpact == b.timeOfImpact) {
+    return 0;
+  }
+  return 1;
 }
 
 void SceneGraph::Update(const f32 dt_Sec) {
@@ -318,26 +338,74 @@ void SceneGraph::Update(const f32 dt_Sec) {
     body.ApplyImpulseLinear(impulseGravity);
   }
 
-  // Check for collisions
-  for (size_t i = 0; i < bodies.size(); ++i) {
-    for (size_t j = i + 1; j < bodies.size(); ++j) {
-      Body &bodyA = bodies[i];
-      Body &bodyB = bodies[j];
-
-      if (bodyA.invMass == 0.f && bodyB.invMass == 0.f)
+  i32 numContacts = 0;
+  const i32 maxContacts = bodies.size() * bodies.size();
+  for (int i = 0; i < bodies.size(); i++) {
+    for (int j = i + 1; j < bodies.size(); j++) {
+      Body *bodyA = &bodies[i];
+      Body *bodyB = &bodies[j];
+      // Skip body pairs with infinite mass
+      if (0.0f == bodyA->invMass && 0.0f == bodyB->invMass) {
         continue;
-
+      }
       Contact contact;
-      if (Intersect(&bodyA, &bodyB, contact)) {
-        ResolveContact(contact);
+      if (Intersect(bodyA, bodyB, dt_Sec, contact)) {
+        m_pTempContacts[numContacts] = contact;
+        numContacts++;
       }
     }
   }
 
-  // Update position
-  for (size_t i = 0; i < bodies.size(); i++) {
-    bodies[i].Update(dt_Sec);
+  // Sort the times of impact from earliest to latest
+  if (numContacts > 1) {
+    qsort(m_pTempContacts, numContacts, sizeof(Contact), CompareContacts);
   }
+
+  float accumulatedTime = 0.0f;
+  for (int i = 0; i < numContacts; i++) {
+    Contact &contact = m_pTempContacts[i];
+    const float dt = contact.timeOfImpact - accumulatedTime;
+    Body *bodyA = contact.bodyA;
+    Body *bodyB = contact.bodyB;
+    // Skip body pairs with infinite mass
+    if (0.0f == bodyA->invMass && 0.0f == bodyB->invMass) {
+      continue;
+    }
+    // Position update
+    for (int j = 0; j < bodies.size(); j++) {
+      bodies[j].Update(dt);
+    }
+    ResolveContact(contact);
+    accumulatedTime += dt;
+  }
+  // Update the positions for the rest of this frame’s time
+  const float timeRemaining = dt_Sec - accumulatedTime;
+  if (timeRemaining > 0.0f) {
+    for (int i = 0; i < bodies.size(); i++) {
+      bodies[i].Update(timeRemaining);
+    }
+  }
+
+  // Check for collisions
+  // for (size_t i = 0; i < bodies.size(); ++i) {
+  //   for (size_t j = i + 1; j < bodies.size(); ++j) {
+  //     Body &bodyA = bodies[i];
+  //     Body &bodyB = bodies[j];
+  //
+  //     if (bodyA.invMass == 0.f && bodyB.invMass == 0.f)
+  //       continue;
+  //
+  //     Contact contact;
+  //     if (Intersect(&bodyA, &bodyB, dt_Sec, contact)) {
+  //       ResolveContact(contact);
+  //     }
+  //   }
+  // }
+  //
+  // // Update position
+  // for (size_t i = 0; i < bodies.size(); i++) {
+  //   bodies[i].Update(dt_Sec);
+  // }
 }
 
 void SceneGraph::AddSphere(Body body) {

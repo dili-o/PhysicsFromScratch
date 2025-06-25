@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+struct Contact;
+
 struct Vertex {
   Vec3 position;
   Vec3 normal;
@@ -34,6 +36,7 @@ public:
   std::vector<Body> bodies;
 
 private:
+  Contact *m_pTempContacts{nullptr};
   hlx::VulkanPipeline m_SpherePipeline;
   VkDescriptorSetLayout m_VkSetLayout;
   VkDescriptorUpdateTemplate vkUpdateTemplate;
