@@ -1,11 +1,57 @@
 #include "SceneGraph.hpp"
+#include "Physics/Broadphase.hpp"
 #include "Physics/Contact.hpp"
 #include "Physics/Intersections.hpp"
+#include <Profiler.hpp>
 // Vendor
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keycode.h>
 #include <imgui.h>
 #include <stb_image.h>
 
 #define MAX_BODIES 300
+
+struct RayDebugPushConstant {
+  Mat4 viewProj;
+  Vec4 rayPositions[2];
+};
+
+static RayDebugPushConstant rayPushConstant{};
+
+hlx::VulkanPipeline createRayDebugPipeline(hlx::VkContext &context);
+
+Vec3 GetRayFromMouse(float mouseX, float mouseY, int screenWidth,
+                     int screenHeight, const Mat4 &viewMatrix,
+                     const Mat4 &projectionMatrix) {
+  // Convert screen space to NDC [-1, 1]
+  float x = (2.0f * mouseX) / screenWidth - 1.0f;
+  float y = (2.0f * mouseY) / screenHeight - 1.0f;
+  glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f);
+
+  // Clip space to view space
+  glm::vec4 rayEye = glm::inverse(projectionMatrix) * rayClip;
+  rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f); // Direction vector
+
+  // View space to world space
+  glm::vec3 rayWorld =
+      glm::normalize(glm::vec3(glm::inverse(viewMatrix) * rayEye));
+  return rayWorld;
+}
+
+bool RayIntersectsSphere(const glm::vec3 &rayOrigin, const glm::vec3 &rayDir,
+                         const glm::vec3 &sphereCenter, float sphereRadius,
+                         float &t) {
+  glm::vec3 L = sphereCenter - rayOrigin;
+  float tca = glm::dot(L, rayDir);
+  float d2 = glm::dot(L, L) - tca * tca;
+  float radius2 = sphereRadius * sphereRadius;
+
+  if (d2 > radius2)
+    return false;
+  float thc = sqrt(radius2 - d2);
+  t = tca - thc; // distance to intersection
+  return true;
+}
 
 SceneGraph::SceneGraph(hlx::VkContext &ctx, u32 maxEntityCount,
                        VkCommandPool vkTransferCommandPool,
@@ -250,6 +296,9 @@ SceneGraph::SceneGraph(hlx::VkContext &ctx, u32 maxEntityCount,
       ctx.vkDevice, &updateTemplateCreateInfo, ctx.vkAllocationCallbacks,
       &vkUpdateTemplate));
 
+  // Ray Debug Pipeline
+  m_RayDebugPipeline = createRayDebugPipeline(ctx);
+
   // Buffers
   std::vector<u32> indices;
   std::vector<Vertex> vertices;
@@ -298,6 +347,11 @@ void SceneGraph::Shutdown(hlx::VkContext &ctx) {
                           ctx.vkAllocationCallbacks);
   vkDestroyPipeline(ctx.vkDevice, m_SpherePipeline.vkHandle,
                     ctx.vkAllocationCallbacks);
+  vkDestroyPipelineLayout(ctx.vkDevice, m_RayDebugPipeline.vkPipelineLayout,
+                          ctx.vkAllocationCallbacks);
+  vkDestroyPipeline(ctx.vkDevice, m_RayDebugPipeline.vkHandle,
+                    ctx.vkAllocationCallbacks);
+
   ctx.DestroyBuffer(m_VertexBuffer);
   ctx.DestroyBuffer(m_IndexBuffer);
 
@@ -327,85 +381,120 @@ i32 CompareContacts(const void *p1, const void *p2) {
 }
 
 void SceneGraph::Update(const f32 dt_Sec) {
+  HELIX_PROFILER_FUNCTION_COLOR();
   if (!m_SimulatePhysics)
     return;
   for (size_t i = 0; i < bodies.size(); i++) {
+    HELIX_PROFILER_ZONE("Apply Gravity", HELIX_PROFILER_COLOR_BARRIER)
     Body &body = bodies[i];
     // Calculate impulse due to graivty
     // Impulse (J) = Mass (m) * Acceleration (g) * dTime (dt)
     f32 mass = 1.f / body.invMass;
     Vec3 impulseGravity = Vec3(0.f, -gravity, 0.f) * mass * dt_Sec;
     body.ApplyImpulseLinear(impulseGravity);
+    HELIX_PROFILER_ZONE_END()
   }
 
-  i32 numContacts = 0;
-  const i32 maxContacts = bodies.size() * bodies.size();
-  for (int i = 0; i < bodies.size(); i++) {
-    for (int j = i + 1; j < bodies.size(); j++) {
-      Body *bodyA = &bodies[i];
-      Body *bodyB = &bodies[j];
-      // Skip body pairs with infinite mass
-      if (0.0f == bodyA->invMass && 0.0f == bodyB->invMass) {
-        continue;
-      }
-      Contact contact;
-      if (Intersect(bodyA, bodyB, dt_Sec, contact)) {
-        m_pTempContacts[numContacts] = contact;
-        numContacts++;
-      }
-    }
-  }
+  // BroadPhase
+  std::vector<CollisionPair> collisionPairs;
+  BroadPhase(bodies.data(), (int)bodies.size(), collisionPairs, dt_Sec);
 
-  // Sort the times of impact from earliest to latest
-  if (numContacts > 1) {
-    qsort(m_pTempContacts, numContacts, sizeof(Contact), CompareContacts);
-  }
-
-  float accumulatedTime = 0.0f;
-  for (int i = 0; i < numContacts; i++) {
-    Contact &contact = m_pTempContacts[i];
-    const float dt = contact.timeOfImpact - accumulatedTime;
-    Body *bodyA = contact.bodyA;
-    Body *bodyB = contact.bodyB;
+  //
+  // NarrowPhase (perform actual collision detection)
+  //
+  int numContacts = 0;
+  const int maxContacts = bodies.size() * bodies.size();
+  HELIX_PROFILER_ZONE("NarrowPhase", HELIX_PROFILER_COLOR_BARRIER)
+  for (int i = 0; i < collisionPairs.size(); i++) {
+    const CollisionPair &pair = collisionPairs[i];
+    Body *bodyA = &bodies[pair.a];
+    Body *bodyB = &bodies[pair.b];
     // Skip body pairs with infinite mass
     if (0.0f == bodyA->invMass && 0.0f == bodyB->invMass) {
       continue;
     }
+    Contact contact;
+    if (Intersect(bodyA, bodyB, dt_Sec, contact)) {
+      m_pTempContacts[numContacts] = contact;
+      numContacts++;
+    }
+  }
+  HELIX_PROFILER_ZONE_END()
+
+  // Sort the times of impact from first to last
+  if (numContacts > 1) {
+    HELIX_PROFILER_ZONE("Sort TOI", HELIX_PROFILER_COLOR_BARRIER)
+    qsort(m_pTempContacts, numContacts, sizeof(Contact), CompareContacts);
+    HELIX_PROFILER_ZONE_END()
+  }
+
+  // Apply ballistic impulses
+  float accumulatedTime = 0.0f;
+  HELIX_PROFILER_ZONE("Apply Ballistic Impulses", HELIX_PROFILER_COLOR_BARRIER)
+  for (int i = 0; i < numContacts; i++) {
+    Contact &contact = m_pTempContacts[i];
+    const float dt = contact.timeOfImpact - accumulatedTime;
     // Position update
+    HELIX_PROFILER_ZONE("Apply Ballistic Impulses::Update Bodies", 0xffa500)
     for (int j = 0; j < bodies.size(); j++) {
       bodies[j].Update(dt);
     }
+    HELIX_PROFILER_ZONE_END()
     ResolveContact(contact);
     accumulatedTime += dt;
   }
+  HELIX_PROFILER_ZONE_END()
+
   // Update the positions for the rest of this frame’s time
   const float timeRemaining = dt_Sec - accumulatedTime;
   if (timeRemaining > 0.0f) {
+    HELIX_PROFILER_ZONE("Update remaining positions",
+                        HELIX_PROFILER_COLOR_BARRIER)
     for (int i = 0; i < bodies.size(); i++) {
       bodies[i].Update(timeRemaining);
     }
+    HELIX_PROFILER_ZONE_END()
   }
+}
 
-  // Check for collisions
-  // for (size_t i = 0; i < bodies.size(); ++i) {
-  //   for (size_t j = i + 1; j < bodies.size(); ++j) {
-  //     Body &bodyA = bodies[i];
-  //     Body &bodyB = bodies[j];
-  //
-  //     if (bodyA.invMass == 0.f && bodyB.invMass == 0.f)
-  //       continue;
-  //
-  //     Contact contact;
-  //     if (Intersect(&bodyA, &bodyB, dt_Sec, contact)) {
-  //       ResolveContact(contact);
-  //     }
-  //   }
-  // }
-  //
-  // // Update position
-  // for (size_t i = 0; i < bodies.size(); i++) {
-  //   bodies[i].Update(dt_Sec);
-  // }
+void SceneGraph::HandleEvents(const SDL_Event *pEvent, SDL_Window *pWindow,
+                              hlx::Camera *pCamera) {
+  switch (pEvent->type) {
+  case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+    if (pEvent->button.button == BUTTON_LEFT) {
+      HTRACE("SceneGraph: [x]: {}, [y]: {}", pEvent->button.x,
+             pEvent->button.y);
+      i32 width = 0, height = 0;
+      SDL_GetWindowSize(pWindow, &width, &height);
+
+      const Vec3 &rayOrigin = pCamera->GetPosition();
+      Vec3 rayDir =
+          GetRayFromMouse(pEvent->button.x, pEvent->button.y, width, height,
+                          pCamera->GetView(), pCamera->GetProjection());
+
+      // rayPushConstant.rayPositions[1] =
+      //     Vec4(glm::normalize(rayDir) * 40.f + rayOrigin, 1.f);
+      bool intersected = false;
+      f32 closestT = std::numeric_limits<f32>::max();
+      for (size_t i = 0; i < bodies.size(); ++i) {
+        f32 t;
+        Body &body = bodies[i];
+        if (RayIntersectsSphere(rayOrigin, rayDir, body.transform.GetPosition(),
+                                body.transform.GetScale().x, t)) {
+          if (t > 0.f && t < closestT) {
+            m_SelectedObject = i;
+            closestT = t;
+            rayPushConstant.rayPositions[0] = Vec4(rayOrigin, 1.f);
+            rayPushConstant.rayPositions[1] =
+                Vec4(body.transform.GetPosition(), 1.f);
+          }
+        }
+      }
+    }
+  } break;
+  default:
+    break;
+  };
 }
 
 void SceneGraph::AddSphere(Body body) {
@@ -435,6 +524,19 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
     vkCmdDrawIndexed(cb, m_IndexCount, 1, 0, 0, 0);
   }
 
+  vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_RayDebugPipeline.vkHandle);
+
+  rayPushConstant.viewProj = push.viewProj;
+  rayPushConstant.rayPositions[0];
+  rayPushConstant.rayPositions[1];
+
+  vkCmdPushConstants(cb, m_RayDebugPipeline.vkPipelineLayout,
+                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(rayPushConstant),
+                     &rayPushConstant);
+  // TODO: Instanced rendering
+  vkCmdDraw(cb, 2, 1, 0, 0);
+
   ImGuiWindowFlags winFlags = ImGuiWindowFlags_NoResize |
                               // Imgui
                               ImGuiWindowFlags_NoMove |
@@ -448,8 +550,8 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       if (ImGui::BeginMenu("Scene")) {
         if (ImGui::MenuItem("Add Sphere")) {
           Body body{};
-          body.transform.position = Vec3(0.f, 10.f, 0.f);
-          body.transform.rotation = Quat(1.f, 0.f, 0.f, 0.f);
+          body.transform.SetPosition(Vec3(0.f, 10.f, 0.f));
+          body.transform.SetRotation(Quat(1.f, 0.f, 0.f, 0.f));
           body.linearVelocity = Vec3(0.f, 0.f, 0.f);
           body.invMass = 1.f;
           body.elasticity = 0.f;
@@ -480,21 +582,25 @@ void SceneGraph::Render(VkCommandBuffer cb, hlx::Camera &camera) {
       Transform &transform = body.transform;
       if (m_SimulatePhysics)
         ImGui::BeginDisabled();
-      ImGui::InputFloat3("Position", &transform.position.x, "%.3f");
 
-      Vec3 eulerRadians = glm::eulerAngles(transform.rotation);
+      Vec3 position = transform.GetPosition();
+      ImGui::InputFloat3("Position", &position.x, "%.3f");
+      if (ImGui::IsItemDeactivatedAfterEdit()) {
+        transform.SetPosition(position);
+      }
+
+      Vec3 eulerRadians = glm::eulerAngles(transform.GetRotation());
       Vec3 eulerDegrees = glm::degrees(eulerRadians);
-
       ImGui::InputFloat3("Rotation(Degrees)", &eulerDegrees.x, "%.3f");
       if (ImGui::IsItemDeactivatedAfterEdit()) {
-        transform.rotation = Quat(glm::radians(eulerDegrees));
+        transform.SetRotation(Quat(glm::radians(eulerDegrees)));
       }
 
       // Scaling is uniform
-      f32 currentScale = transform.scale.x;
+      f32 currentScale = transform.GetScale().x;
       ImGui::InputFloat("Scale", &currentScale, 0.f, 0.f, "%.3f");
       if (ImGui::IsItemDeactivatedAfterEdit()) {
-        transform.scale = Vec3(currentScale);
+        transform.SetScale(Vec3(currentScale));
       }
 
       // Mass
@@ -568,4 +674,129 @@ void GenerateSphere(std::vector<Vertex> &outVertices,
       outIndices.push_back(i1 + 1);
     }
   }
+}
+
+hlx::VulkanPipeline createRayDebugPipeline(hlx::VkContext &ctx) {
+  hlx::VulkanPipeline pipeline{};
+  // Pipeline
+  HASSERT(hlx::CompileShader(SHADER_PATH, "RayDebug.vert", "RayDebug_vert.spv",
+                             VK_SHADER_STAGE_VERTEX_BIT));
+  HASSERT(hlx::CompileShader(SHADER_PATH, "RayDebug.frag", "RayDebug_frag.spv",
+                             VK_SHADER_STAGE_FRAGMENT_BIT));
+
+  auto vertShaderCode = hlx::ReadFile(SHADER_PATH "/Spirv/RayDebug_vert.spv");
+  auto fragShaderCode = hlx::ReadFile(SHADER_PATH "/Spirv/RayDebug_frag.spv");
+
+  VkShaderModule vertShaderModule =
+      hlx::CreateShaderModule(ctx.vkDevice, vertShaderCode);
+  VkShaderModule fragShaderModule =
+      hlx::CreateShaderModule(ctx.vkDevice, fragShaderCode);
+
+  VkPipelineShaderStageCreateInfo vertShaderStageInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = vertShaderModule,
+      .pName = "main"};
+
+  VkPipelineShaderStageCreateInfo fragShaderStageInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = fragShaderModule,
+      .pName = "main"};
+
+  VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
+                                                    fragShaderStageInfo};
+
+  // Dynamic State
+  VkPipelineDynamicStateCreateInfo dynamicState =
+      hlx::init::PipelineDynamicStateCreateInfo();
+  // Input Assembly
+  VkPipelineInputAssemblyStateCreateInfo inputAssembly =
+      hlx::init::PipelineInputAssemblyStateCreateInfo();
+  inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+  // Viewport State
+  VkPipelineViewportStateCreateInfo viewportState =
+      hlx::init::PipelineViewportStateCreateInfo();
+  // Rasterizer State
+  VkPipelineRasterizationStateCreateInfo rasterizer =
+      hlx::init::PipelineRasterizationStateCreateInfo();
+  // Multisampling State
+  VkPipelineMultisampleStateCreateInfo multisampling =
+      hlx::init::PipelineMultisampleStateCreateInfo();
+  // Depth and Stencil State
+  VkPipelineDepthStencilStateCreateInfo depthStencil =
+      hlx::init::PipelineDepthStencilStateCreateInfo(true);
+  // Color Blend State
+  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+  colorBlendAttachment.colorWriteMask =
+      VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+      VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  colorBlendAttachment.blendEnable = VK_FALSE;
+  colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  colorBlendAttachment.dstColorBlendFactor =
+      VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+  colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+  VkPipelineColorBlendStateCreateInfo color_blending{
+      VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+  color_blending.logicOpEnable = VK_FALSE;
+  color_blending.logicOp = VK_LOGIC_OP_CLEAR;
+  color_blending.attachmentCount = 1;
+  color_blending.pAttachments = &colorBlendAttachment;
+
+  // Pipeline Layout
+  VkPushConstantRange pushConst{};
+  pushConst.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  pushConst.offset = 0;
+  pushConst.size = sizeof(RayDebugPushConstant);
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  pipelineLayoutInfo.setLayoutCount = 0;
+  pipelineLayoutInfo.pSetLayouts = nullptr;
+  pipelineLayoutInfo.pushConstantRangeCount = 1;
+  pipelineLayoutInfo.pPushConstantRanges = &pushConst;
+
+  VK_CHECK(vkCreatePipelineLayout(ctx.vkDevice, &pipelineLayoutInfo,
+                                  ctx.vkAllocationCallbacks,
+                                  &pipeline.vkPipelineLayout));
+  // Dynamic Rendering
+  VkFormat colorFormats[1] = {ctx.swapchain.vkSurfaceFormat.format};
+
+  VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+      VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR};
+  pipelineRenderingCreateInfo.pNext = VK_NULL_HANDLE;
+  pipelineRenderingCreateInfo.colorAttachmentCount = 1;
+  pipelineRenderingCreateInfo.pColorAttachmentFormats = colorFormats;
+  pipelineRenderingCreateInfo.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
+  pipelineRenderingCreateInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+
+  VkPipelineVertexInputStateCreateInfo vertexInputState{
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+
+  VkGraphicsPipelineCreateInfo pipelineCreateInfo{
+      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+  pipelineCreateInfo.stageCount = 2;
+  pipelineCreateInfo.pStages = shaderStages;
+  pipelineCreateInfo.pVertexInputState = &vertexInputState;
+  pipelineCreateInfo.pInputAssemblyState = &inputAssembly;
+  pipelineCreateInfo.pViewportState = &viewportState;
+  pipelineCreateInfo.pRasterizationState = &rasterizer;
+  pipelineCreateInfo.pMultisampleState = &multisampling;
+  pipelineCreateInfo.pDepthStencilState = &depthStencil;
+  pipelineCreateInfo.pColorBlendState = &color_blending;
+  pipelineCreateInfo.pDynamicState = &dynamicState;
+  pipelineCreateInfo.layout = pipeline.vkPipelineLayout;
+  pipelineCreateInfo.renderPass = VK_NULL_HANDLE;
+  pipelineCreateInfo.pNext = &pipelineRenderingCreateInfo;
+
+  VK_CHECK(vkCreateGraphicsPipelines(
+      ctx.vkDevice, VK_NULL_HANDLE, 1, &pipelineCreateInfo,
+      ctx.vkAllocationCallbacks, &pipeline.vkHandle));
+  vkDestroyShaderModule(ctx.vkDevice, fragShaderModule, nullptr);
+  vkDestroyShaderModule(ctx.vkDevice, vertShaderModule, nullptr);
+
+  return pipeline;
 }

@@ -1,21 +1,23 @@
 
 #include "Intersections.hpp"
 
-bool RaySphere(const Vec3 &rayStart, const Vec3 &rayDir,
-               const Vec3 &sphereCenter, const f32 sphereRadius, f32 &t1,
-               f32 &t2);
-
 bool SphereSphereDynamic(const f32 radiusA, const f32 radiusB, const Vec3 &posA,
                          const Vec3 &posB, const Vec3 &velA, const Vec3 &velB,
                          const f32 dt, Vec3 &ptOnA, Vec3 &ptOnB, f32 &toi);
 
 bool Intersect(Body *bodyA, Body *bodyB, f32 dt_Sec, Contact &contact) {
   // TODO: Only spheres for now
-  if (SphereSphereDynamic(bodyA->transform.scale.x, bodyB->transform.scale.x,
-                          bodyA->transform.position, bodyB->transform.position,
+  // TODO: Also Try to reduce how often you call getter and setter functions
+  Vec3 positionA = bodyA->transform.GetPosition();
+  Vec3 positionB = bodyB->transform.GetPosition();
+  if (SphereSphereDynamic(bodyA->transform.GetScale().x,
+                          bodyB->transform.GetScale().x, positionA, positionB,
                           bodyA->linearVelocity, bodyB->linearVelocity, dt_Sec,
                           contact.ptOnA_WorldSpace, contact.ptOnB_WorldSpace,
                           contact.timeOfImpact)) {
+    bodyA->transform.SetPosition(positionA);
+    bodyB->transform.SetPosition(positionB);
+
     contact.bodyA = bodyA;
     contact.bodyB = bodyB;
     // Step bodies forward to get local space collision points
@@ -26,16 +28,16 @@ bool Intersect(Body *bodyA, Body *bodyB, f32 dt_Sec, Contact &contact) {
         bodyA->WorldSpaceToBodySpace(contact.ptOnA_WorldSpace);
     contact.ptOnB_LocalSpace =
         bodyB->WorldSpaceToBodySpace(contact.ptOnB_WorldSpace);
-    contact.normalAB = bodyB->transform.position -
-                       bodyA->transform.position; // TODO: Change to BA?
+    contact.normalAB = bodyA->transform.GetPosition() -
+                       bodyB->transform.GetPosition(); // TODO: Change to BA?
     contact.normalAB = glm::normalize(contact.normalAB);
     // Unwind time step
     bodyA->Update(-contact.timeOfImpact);
     bodyB->Update(-contact.timeOfImpact);
     // Calculate the separation distance
-    Vec3 ab = bodyB->transform.position - bodyA->transform.position;
-    float r =
-        glm::length(ab) - (bodyA->transform.scale.x + bodyB->transform.scale.x);
+    Vec3 ab = bodyB->transform.GetPosition() - bodyA->transform.GetPosition();
+    float r = glm::length(ab) -
+              (bodyA->transform.GetScale().x + bodyB->transform.GetScale().x);
     contact.separationDistance = r;
     return true;
   }

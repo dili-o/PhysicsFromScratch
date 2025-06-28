@@ -10,17 +10,6 @@ static SDL_Keycode sUpButton = SDLK_SPACE;
 static SDL_Keycode sDownButton = SDLK_LCTRL;
 static SDL_Keycode sToggleOrbit = SDLK_O;
 
-enum Buttons {
-  BUTTON_PADDING,
-  BUTTON_LEFT,
-  BUTTON_MIDDLE,
-  BUTTON_RIGHT,
-  BUTTON_SIDE_1,
-  BUTTON_SIDE_2,
-  BUTTON_PADDING2,
-  BUTTON_MAX_BUTTONS
-};
-
 Camera::Camera(Vec3 position, f32 nearPlane, f32 farPlane, f32 fov,
                f32 aspectRatio)
     : m_IsActive(false), m_IsShiftDown(false), m_Velocity(Vec3(0.f)),
@@ -58,6 +47,8 @@ Mat4 Camera::GetProjection() {
   projection[1][1] *= -1.f;
   return projection;
 }
+
+const Vec3 &Camera::GetPosition() const { return m_Position; }
 
 void Camera::HandleEvents(const SDL_Event *pEvent, SDL_Window *pWindow) {
   switch (pEvent->type) {

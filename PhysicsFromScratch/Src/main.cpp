@@ -2,6 +2,7 @@
 #include <Assert.hpp>
 #include <Camera.hpp>
 #include <Platform.hpp>
+#include <Profiler.hpp>
 #include <SceneGraph.hpp>
 #include <Vulkan/ImguiBackend.hpp>
 #include <Vulkan/VulkanTypes.hpp>
@@ -10,10 +11,9 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
 #include <format>
+#include <tracy/TracyVulkan.hpp>
 
-static bool pOpen = true;
-
-#define TARGET_FPS 30
+#define TARGET_FPS 60
 
 hlx::VulkanPipeline createBackgroundPipeline(hlx::VkContext &ctx);
 
@@ -23,6 +23,7 @@ int main() {
   hlx::VkContext ctx;
   ctx.Init(platform.GetWindowHandle());
   hlx::Camera camera(Vec3(0.f), 0.1f, 3000.f);
+  TracyVkCtx graphicQueueTracer;
 
   const u32 kMaxFramesInFlight = 3;
   static bool limitFrames = true;
@@ -70,41 +71,62 @@ int main() {
   VK_CHECK(vkAllocateCommandBuffers(ctx.vkDevice, &allocInfo,
                                     vkGraphicsCommandBuffers.data()));
 
+  // Vulkan Tracy
+  graphicQueueTracer = TracyVkContext(
+      ctx.vkInstance, ctx.vkPhysicalDevice, ctx.vkDevice, ctx.vkGraphicsQueue,
+      vkGraphicsCommandBuffers[0], vkGetInstanceProcAddr, vkGetDeviceProcAddr);
+
   hlx::ImguiBackend imguiBackend(&ctx, platform.GetWindowHandle(),
                                  vkGraphicsCommandPool);
   SceneGraph sceneGraph(ctx, 100, vkTransferCommandPool, vkGraphicsCommandPool);
 
   Body body{};
-  // body.transform.position = Vec3(0.f, 5.f, 0.f);
-  // body.transform.rotation = Quat(1.f, 0.f, 0.f, 0.f);
-  // body.linearVelocity = Vec3(1.f, 0.f, 0.f);
-  // body.invMass = 1.f;
-  // body.elasticity = 0.f;
-  // body.friction = 0.5f;
-  // sceneGraph.AddSphere(body);
-
-  body.transform.position = Vec3(-3.f, 3.f, 0.f);
-  body.linearVelocity = Vec3(6000.f, 0.f, 0.f);
+  body.transform.SetRotation(Quat(1.f, 0.f, 0.f, 0.f));
+  body.linearVelocity = Vec3(0.f);
   body.invMass = 1.0f;
-  body.elasticity = 0.0f;
+  body.elasticity = 0.5f;
   body.friction = 0.5f;
-  sceneGraph.AddSphere(body);
+  body.transform.SetScale(Vec3(0.5f));
+  // Dynamic Bodies
+#if _DEBUG
+  for (int x = 0; x < 6; x++) {
+    for (int z = 0; z < 6; z++) {
+      float radius = 0.5f;
+      float xx = float(x - 1) * radius * 1.5f;
+      float zz = float(z - 1) * radius * 1.5f;
+      body.transform.SetPosition(Vec3(xx, 10.f, zz));
+      sceneGraph.AddSphere(body);
+    }
+  }
+#else
+  f32 radius = 0.5f;
+  for (i32 y = 0; y < 6; ++y) {
+    for (int x = 0; x < 6; x++) {
+      for (int z = 0; z < 6; z++) {
+        f32 xx = f32(x - 1) * radius * 1.5f;
+        f32 yy = f32(y + 10) * radius * 2.5f;
+        f32 zz = f32(z - 1) * radius * 1.5f;
+        body.transform.SetPosition(Vec3(xx, yy, zz));
+        sceneGraph.AddSphere(body);
+      }
+    }
+  }
+#endif // _DEBUG
 
-  body.transform.position = Vec3(0, 3, 0);
-  body.linearVelocity = Vec3(0, 0, 0);
+  // Static ”floor”
   body.invMass = 0.0f;
-  body.elasticity = 0.0f;
+  body.elasticity = 0.99f;
   body.friction = 0.5f;
-  sceneGraph.AddSphere(body);
-
-  body.transform.position = Vec3(0.f, -1000.f, 0.f);
-  body.transform.scale = Vec3(1000.f);
-  body.linearVelocity = Vec3(0.f, 0.f, 0.f);
-  body.angularVelocity = Vec3(0.f);
-  body.invMass = 0.f;
-  body.elasticity = 1.f;
-  body.friction = 0.5f;
-  sceneGraph.AddSphere(body);
+  for (int x = 0; x < 3; x++) {
+    for (int z = 0; z < 3; z++) {
+      float radius = 80.0f;
+      float xx = float(x - 1) * radius * 0.25f;
+      float zz = float(z - 1) * radius * 0.25f;
+      body.transform.SetPosition(Vec3(xx, -radius, zz));
+      body.transform.SetScale(Vec3(radius));
+      sceneGraph.AddSphere(body);
+    }
+  }
 
   hlx::VulkanPipeline backgroundPipeline = createBackgroundPipeline(ctx);
 
@@ -151,6 +173,7 @@ int main() {
         // End the main loop
         quit = true;
       }
+      sceneGraph.HandleEvents(&e, platform.GetWindowHandle(), &camera);
       camera.HandleEvents(&e, platform.GetWindowHandle());
       if (e.type == SDL_EVENT_KEY_DOWN) {
         if (e.key.key == SDLK_P)
@@ -320,18 +343,21 @@ int main() {
 
     vkCmdBeginRendering(vkGraphicsCommandBuffers[currentFrame], &renderInfo);
 
-    vkCmdBindPipeline(vkGraphicsCommandBuffers[currentFrame],
-                      VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      backgroundPipeline.vkHandle);
-    vkCmdDraw(vkGraphicsCommandBuffers[currentFrame], 3, 1, 0, 0);
+    {
+      TracyVkZone(graphicQueueTracer, vkGraphicsCommandBuffers[currentFrame],
+                  "Draws");
+      vkCmdBindPipeline(vkGraphicsCommandBuffers[currentFrame],
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        backgroundPipeline.vkHandle);
+      vkCmdDraw(vkGraphicsCommandBuffers[currentFrame], 3, 1, 0, 0);
 
-    imguiBackend.BeginFrame();
+      imguiBackend.BeginFrame();
 
-    sceneGraph.Render(vkGraphicsCommandBuffers[currentFrame], camera);
+      sceneGraph.Render(vkGraphicsCommandBuffers[currentFrame], camera);
 
-    // ImGui::ShowDemoWindow(&show_demo);
-    imguiBackend.RenderFrame(vkGraphicsCommandBuffers[currentFrame],
-                             currentFrame);
+      imguiBackend.RenderFrame(vkGraphicsCommandBuffers[currentFrame],
+                               currentFrame);
+    }
 
     vkCmdEndRendering(vkGraphicsCommandBuffers[currentFrame]);
 
@@ -362,6 +388,7 @@ int main() {
                             &dependencyInfo);
     }
 
+    TracyVkCollect(graphicQueueTracer, vkGraphicsCommandBuffers[currentFrame]);
     VK_CHECK(vkEndCommandBuffer(vkGraphicsCommandBuffers[currentFrame]));
 
     VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
@@ -423,13 +450,17 @@ int main() {
     f64 remainingTimeMS = targetFrameTimeMS - frameElapsedTimeMS;
     if (remainingTimeMS > 0 && limitFrames) {
       // If there is time left, give it back to the OS.
+      HELIX_PROFILER_ZONE("Application sleep", HELIX_PROFILER_COLOR_DEFAULT)
       SDL_Delay(static_cast<u32>(remainingTimeMS - 1));
+      HELIX_PROFILER_ZONE_END()
     }
 
     std::string title =
         std::format("PhysicsFromScratch,    FrameTime: {:.3f}ms", deltaTime);
     SDL_SetWindowTitle(platform.GetWindowHandle(), title.c_str());
     currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
+
+    HELIX_PROFILER_FRAME("Frame");
   }
 
   vkDeviceWaitIdle(ctx.vkDevice);
@@ -442,6 +473,7 @@ int main() {
                        ctx.vkAllocationCallbacks);
   }
 
+  TracyVkDestroy(graphicQueueTracer);
   hlx::util::DestroyVmaImage(ctx.vmaAllocator, depthImage);
   hlx::util::DestroyImageView(ctx.vkDevice, ctx.vkAllocationCallbacks,
                               depthImageView);

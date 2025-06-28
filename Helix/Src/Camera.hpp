@@ -5,6 +5,18 @@
 // Vendor
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
+
+enum Buttons {
+  BUTTON_PADDING,
+  BUTTON_LEFT,
+  BUTTON_MIDDLE,
+  BUTTON_RIGHT,
+  BUTTON_SIDE_1,
+  BUTTON_SIDE_2,
+  BUTTON_PADDING2,
+  BUTTON_MAX_BUTTONS
+};
+
 namespace hlx {
 
 class Camera {
@@ -15,6 +27,7 @@ public:
   Mat4 GetRotation();
   Mat4 GetView();
   Mat4 GetProjection();
+  const Vec3 &GetPosition() const;
 
   void HandleEvents(const SDL_Event *pEvent, SDL_Window *pWindow);
   void Update(f32 deltaTime);

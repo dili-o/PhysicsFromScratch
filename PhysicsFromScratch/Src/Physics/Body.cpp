@@ -1,4 +1,5 @@
 #include "Body.hpp"
+#include "glm/geometric.hpp"
 
 Vec3 Body::GetCenterOfMassWorldSpace() const {
   Vec4 pos = transform.GetMat4() * Vec4(centerOfMass, 1.f);
@@ -7,13 +8,13 @@ Vec3 Body::GetCenterOfMassWorldSpace() const {
 
 Vec3 Body::WorldSpaceToBodySpace(const Vec3 &worldPos) const {
   Vec3 tmp = worldPos - GetCenterOfMassWorldSpace();
-  Quat inverseOrient = glm::inverse(transform.rotation);
+  Quat inverseOrient = glm::inverse(transform.GetRotation());
   return inverseOrient * tmp;
 }
 
 Vec3 Body::BodySpaceToWorldSpace(const Vec3 &worldPt) const {
   Vec3 worldSpace =
-      GetCenterOfMassWorldSpace() + (transform.rotation * worldPt);
+      GetCenterOfMassWorldSpace() + (transform.GetRotation() * worldPt);
   return worldSpace;
 }
 
@@ -57,10 +58,11 @@ void Body::Update(const f32 dt_Sec) {
   // Do not update objects with infinite mass
   if (invMass == 0.f)
     return;
-  transform.position += linearVelocity * dt_Sec;
+  // TODO: Make local copies of transform's rotation and position
+  transform.SetPosition(transform.GetPosition() + linearVelocity * dt_Sec);
 
   Vec3 centerOfMassWorld = GetCenterOfMassWorldSpace();
-  Vec3 cmToWorldPos = transform.position - centerOfMassWorld;
+  Vec3 cmToWorldPos = transform.GetPosition() - centerOfMassWorld;
   // Total Torque is equal to external applied torques + internal torque
   // (precession) T= T_external +omega x I * omega T_external =0 because it was
   // applied in the collision response function T= Ia =w x I * w a = I^−1 ( w x
@@ -80,13 +82,12 @@ void Body::Update(const f32 dt_Sec) {
     angleAxisRotationNorm = glm::normalize(angleAxisRotation);
   Quat quatRotation =
       glm::angleAxis(glm::length(angleAxisRotation), angleAxisRotationNorm);
-  // Update the rotation
-  transform.rotation = quatRotation * transform.rotation;
-  // Normalize to account for floating-point precession errors
-  transform.rotation = glm::normalize(transform.rotation);
+  // Update the rotation and Normalize to account for floating-point precession
+  // errors
+  transform.SetRotation(glm::normalize(quatRotation * transform.GetRotation()));
   // Update the position to rotate around it's center of mass
-  transform.position =
-      centerOfMassWorld + glm::rotate(quatRotation, cmToWorldPos);
+  transform.SetPosition(centerOfMassWorld +
+                        glm::rotate(quatRotation, cmToWorldPos));
 }
 
 Mat3 Body::GetInertiaTensorBodySpace() const {
@@ -95,7 +96,7 @@ Mat3 Body::GetInertiaTensorBodySpace() const {
 
 Mat3 Body::GetInertiaTensorWorldSpace() const {
   Mat3 inertiaTensor = GetSphereInertiaTensor(this) * invMass;
-  Mat3 orient = glm::toMat3(transform.rotation);
+  Mat3 orient = glm::toMat3(transform.GetRotation());
   return orient * inertiaTensor * glm::transpose(orient);
 }
 
@@ -110,7 +111,23 @@ Mat3 Body::GetInverseInertiaTensorWorldSpace() const {
   // TODO: Right now we are assuming all bodies are spheres
   Mat3 inertiaTensor = GetSphereInertiaTensor(this);
   Mat3 invInertiaTensor = glm::inverse(inertiaTensor) * invMass;
-  Mat3 orient = glm::toMat3(transform.rotation);
+  Mat3 orient = glm::toMat3(transform.GetRotation());
   invInertiaTensor = orient * invInertiaTensor * glm::transpose(orient);
   return invInertiaTensor;
+}
+
+Bounds GetSphereBounds(const Body *pBody, const Vec3 &pos, const Quat &orient) {
+  Bounds tmp;
+  f32 radius = pBody->transform.GetScale().x;
+  tmp.mins = Vec3(-radius) + pos;
+  tmp.maxs = Vec3(radius) + pos;
+  return tmp;
+}
+
+Bounds GetSphereBounds(const Body *pBody) {
+  Bounds tmp;
+  f32 radius = pBody->transform.GetScale().x;
+  tmp.mins = Vec3(-radius);
+  tmp.maxs = Vec3(radius);
+  return tmp;
 }

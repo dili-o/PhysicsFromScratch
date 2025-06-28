@@ -458,7 +458,8 @@ bool ImguiBackend::HandleEvents(void *pEvent) {
   ImGui_ImplSDL3_ProcessEvent(event);
   if (event->type == SDL_EVENT_QUIT || event->type == SDL_EVENT_WINDOW_RESIZED)
     return false;
-  return ImGui::GetCurrentContext()->NavWindow;
+  return ImGui::GetCurrentContext()->NavWindow ||
+         ImGui::GetIO().WantCaptureMouse;
 }
 
 } // namespace hlx

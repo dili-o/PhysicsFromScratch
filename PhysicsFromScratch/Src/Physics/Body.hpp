@@ -1,6 +1,7 @@
 #pragma once
+#include "Bounds.hpp"
 #include <Defines.hpp>
-#include <Math/Quat.hpp>
+#include <Math/Transform.hpp>
 
 const f32 gravity = 10.f;
 
@@ -33,8 +34,14 @@ struct Body {
 
 inline Mat3 GetSphereInertiaTensor(const Body *body) {
   Mat3 tensor(0.f);
-  tensor[0][0] = 2.f * body->transform.scale.x * body->transform.scale.x / 5.f;
-  tensor[1][1] = 2.f * body->transform.scale.x * body->transform.scale.x / 5.f;
-  tensor[2][2] = 2.f * body->transform.scale.x * body->transform.scale.x / 5.f;
+  tensor[0][0] =
+      2.f * body->transform.GetScale().x * body->transform.GetScale().x / 5.f;
+  tensor[1][1] =
+      2.f * body->transform.GetScale().x * body->transform.GetScale().x / 5.f;
+  tensor[2][2] =
+      2.f * body->transform.GetScale().x * body->transform.GetScale().x / 5.f;
   return tensor;
 }
+
+Bounds GetSphereBounds(const Body *pBody, const Vec3 &pos, const Quat &orient);
+Bounds GetSphereBounds(const Body *pBody);

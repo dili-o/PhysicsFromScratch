@@ -1,6 +1,8 @@
 #include "Contact.hpp"
+#include "Profiler.hpp"
 
 void ResolveContact(Contact &contact) {
+  HELIX_PROFILER_FUNCTION();
   Body *bodyA = contact.bodyA;
   Body *bodyB = contact.bodyB;
 
@@ -63,14 +65,14 @@ void ResolveContact(Contact &contact) {
     bodyA->ApplyImpulse(ptOnA, impulseFriction * -1.0f);
     bodyB->ApplyImpulse(ptOnB, impulseFriction * 1.0f);
   }
-  // Let ’s alsomove our colliding objects to just outside of each other
+  // Let’s also move our colliding objects to just outside of each other
   // (projection method)
   if (contact.timeOfImpact == 0.f) {
     //    Resolve Positions
     const f32 tA = bodyA->invMass / (bodyA->invMass + bodyB->invMass);
     const f32 tB = bodyB->invMass / (bodyA->invMass + bodyB->invMass);
     const Vec3 ds = contact.ptOnB_WorldSpace - contact.ptOnA_WorldSpace;
-    bodyA->transform.position += ds * tA;
-    bodyB->transform.position -= ds * tB;
+    bodyA->transform.SetPosition(bodyA->transform.GetPosition() + (ds * tA));
+    bodyB->transform.SetPosition(bodyB->transform.GetPosition() - (ds * tB));
   }
 }

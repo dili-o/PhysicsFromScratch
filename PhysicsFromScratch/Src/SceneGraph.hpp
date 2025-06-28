@@ -26,8 +26,12 @@ public:
              VkCommandPool vkGraphicsCommandPool);
 
   void Shutdown(hlx::VkContext &ctx);
+
   void TogglePhysics();
   void Update(const f32 dt_Sec);
+  void HandleEvents(const SDL_Event *pEvent, SDL_Window *pWindow,
+                    hlx::Camera *pCamera);
+
   void AddSphere(Body body);
   void Render(VkCommandBuffer cb, hlx::Camera &camera);
 
@@ -38,6 +42,7 @@ public:
 private:
   Contact *m_pTempContacts{nullptr};
   hlx::VulkanPipeline m_SpherePipeline;
+  hlx::VulkanPipeline m_RayDebugPipeline;
   VkDescriptorSetLayout m_VkSetLayout;
   VkDescriptorUpdateTemplate vkUpdateTemplate;
   VkDescriptorImageInfo imageDescriptor;
